@@ -296,26 +296,52 @@ def planner(state: AgentState) -> dict[str, Any]:
     security_topic = context.get("security_topic", "")
     project_type = context.get("project_type", "api_only")
     tech_stack = context.get("tech_stack", {})
+    requirements = context.get("requirements", {})
 
     backend = tech_stack.get("backend", "")
     frontend = tech_stack.get("frontend", "")
     database = tech_stack.get("database", "")
     deployment = tech_stack.get("deployment", "")
 
+    # Extract additional context from requirements
+    cloud_provider = requirements.get("cloud_provider", "")
+    infrastructure = requirements.get("infrastructure_components", [])
+    additional_context = requirements.get("additional_context", "")
+
+    # Build tech stack description (only include what's specified)
+    tech_stack_lines = []
+    if backend:
+        tech_stack_lines.append(f"- Backend: {backend}")
+    if frontend:
+        tech_stack_lines.append(f"- Frontend: {frontend}")
+    if database:
+        tech_stack_lines.append(f"- Database: {database}")
+    if deployment:
+        tech_stack_lines.append(f"- Deployment: {deployment}")
+    if cloud_provider:
+        tech_stack_lines.append(f"- Cloud Provider: {cloud_provider}")
+    if infrastructure:
+        tech_stack_lines.append(f"- Infrastructure: {', '.join(infrastructure)}")
+
+    tech_stack_text = "\n".join(tech_stack_lines) if tech_stack_lines else "Not specified"
+
     prompt = f"""Create a research plan for implementing secure {security_topic} in a {project_type} project.
 
 Tech Stack:
-- Backend: {backend or 'Not specified'}
-- Frontend: {frontend or 'Not specified'}
-- Database: {database or 'Not specified'}
-- Deployment: {deployment or 'Not specified'}
+{tech_stack_text}
+{f"Additional Context: {additional_context}" if additional_context else ""}
 
 Generate {MAX_RESEARCH_QUESTIONS} specific research questions that will help gather:
 1. Best practices and standards (OWASP, RFCs, NIST)
-2. Framework-specific implementation guidance for {backend}
+2. Framework-specific implementation guidance{f" for {backend}" if backend else ""}
 3. Common vulnerabilities and mitigations for {security_topic}
 4. Code examples and configurations
-5. Deployment and production considerations
+5. Deployment and production considerations{f" for {deployment}" if deployment else ""}{f" on {cloud_provider}" if cloud_provider else ""}
+
+IMPORTANT:
+- Focus research on the SPECIFIC technologies mentioned (e.g., {backend if backend else 'the specified framework'})
+- If a cloud provider is specified ({cloud_provider if cloud_provider else 'none'}), include cloud-specific security guidance
+- Include queries about {', '.join(infrastructure) if infrastructure else 'deployment infrastructure'} if relevant
 
 Return ONLY a JSON array of search queries optimized for web search. Make them specific and actionable.
 Example format: ["query 1", "query 2", ...]"""
@@ -330,9 +356,11 @@ Example format: ["query 1", "query 2", ...]"""
         # Ensure we have valid queries
         research_plan = [q for q in research_plan if isinstance(q, str) and len(q) > 5]
 
-        # Add some standard security queries
+        # Add targeted queries based on context
         if backend:
             research_plan.append(f"{security_topic} {backend} implementation tutorial")
+        if deployment and cloud_provider:
+            research_plan.append(f"{security_topic} {deployment} {cloud_provider} best practices")
         research_plan.append(f"OWASP {security_topic} best practices")
 
         # Limit to max questions
@@ -349,7 +377,7 @@ Example format: ["query 1", "query 2", ...]"""
             f"{security_topic} implementation guide",
             f"{security_topic} {backend} tutorial" if backend else f"{security_topic} tutorial",
             f"{security_topic} security vulnerabilities",
-            f"{security_topic} production configuration",
+            f"{security_topic} {deployment} configuration" if deployment else f"{security_topic} production configuration",
         ]
         return {
             "research_plan": fallback_plan,
@@ -417,6 +445,7 @@ def synthesizer(state: AgentState) -> dict[str, Any]:
     context = state.get("context", {})
     security_topic = context.get("security_topic", "")
     tech_stack = context.get("tech_stack", {})
+    requirements = context.get("requirements", {})
 
     if not search_results:
         logger.warning("No search results to synthesize")
@@ -424,13 +453,34 @@ def synthesizer(state: AgentState) -> dict[str, Any]:
 
     results_text = format_search_results(search_results)
 
+    # Build tech stack description - only include what's specified
+    backend = tech_stack.get("backend", "")
+    frontend = tech_stack.get("frontend", "")
+    database = tech_stack.get("database", "")
+    deployment = tech_stack.get("deployment", "")
+    cloud_provider = requirements.get("cloud_provider", "")
+    infrastructure = requirements.get("infrastructure_components", [])
+
+    tech_stack_lines = []
+    if backend:
+        tech_stack_lines.append(f"- Backend: {backend}")
+    if frontend:
+        tech_stack_lines.append(f"- Frontend: {frontend}")
+    if database:
+        tech_stack_lines.append(f"- Database: {database}")
+    if deployment:
+        tech_stack_lines.append(f"- Deployment: {deployment}")
+    if cloud_provider:
+        tech_stack_lines.append(f"- Cloud Provider: {cloud_provider}")
+    if infrastructure:
+        tech_stack_lines.append(f"- Infrastructure: {', '.join(infrastructure)}")
+
+    tech_stack_text = "\n".join(tech_stack_lines) if tech_stack_lines else "Not specified"
+
     prompt = f"""Analyze and organize the following security research results for implementing {security_topic}.
 
-Target Tech Stack:
-- Backend: {tech_stack.get('backend', 'Not specified')}
-- Frontend: {tech_stack.get('frontend', 'Not specified')}
-- Database: {tech_stack.get('database', 'Not specified')}
-- Deployment: {tech_stack.get('deployment', 'Not specified')}
+Target Tech Stack (ONLY focus on these technologies):
+{tech_stack_text}
 
 Research Results:
 {results_text}
@@ -491,11 +541,34 @@ def architect(state: AgentState) -> dict[str, Any]:
     security_topic = context.get("security_topic", "")
     project_type = context.get("project_type", "api_only")
     tech_stack = context.get("tech_stack", {})
+    requirements = context.get("requirements", {})
 
     backend = tech_stack.get("backend", "")
     frontend = tech_stack.get("frontend", "")
     database = tech_stack.get("database", "")
     deployment = tech_stack.get("deployment", "")
+
+    # Extract additional context from requirements
+    cloud_provider = requirements.get("cloud_provider", "")
+    infrastructure = requirements.get("infrastructure_components", [])
+    additional_context = requirements.get("additional_context", "")
+
+    # Build tech stack description - ONLY include what's specified
+    tech_stack_lines = []
+    if backend:
+        tech_stack_lines.append(f"- Backend: {backend}")
+    if frontend:
+        tech_stack_lines.append(f"- Frontend: {frontend}")
+    if database:
+        tech_stack_lines.append(f"- Database: {database}")
+    if deployment:
+        tech_stack_lines.append(f"- Deployment Platform: {deployment}")
+    if cloud_provider:
+        tech_stack_lines.append(f"- Cloud Provider: {cloud_provider}")
+    if infrastructure:
+        tech_stack_lines.append(f"- Infrastructure Components: {', '.join(infrastructure)}")
+
+    tech_stack_text = "\n".join(tech_stack_lines) if tech_stack_lines else "Not specified"
 
     # Format knowledge for prompt
     knowledge_text = json.dumps(synthesized_knowledge, indent=2) if synthesized_knowledge else "No synthesized knowledge available"
@@ -506,10 +579,18 @@ def architect(state: AgentState) -> dict[str, Any]:
         sources.append(f"- {result.get('title', 'Unknown')}: {result.get('url', '')}")
     sources_text = "\n".join(sources) if sources else "No sources available"
 
-    system_prompt = """You are a senior security engineer creating practical implementation guides.
+    system_prompt = f"""You are a senior security engineer creating practical implementation guides.
+
+CRITICAL REQUIREMENTS:
+- Generate code ONLY for the specified technologies: {backend if backend else 'no specific backend'}
+- Do NOT suggest or use technologies that were not specified by the user
+- If no frontend is specified, do NOT include frontend code
+- If no database is specified, do NOT include database code
+- Deployment must target: {deployment if deployment else 'containerized environment'}{f" on {cloud_provider}" if cloud_provider else ""}
+
 Your guides must be:
 - Practical and copy-paste ready
-- Include complete, working code examples
+- Include complete, working code examples for {backend if backend else 'the specified stack'}
 - Security-focused with inline comments
 - Concise but thorough
 - Well-cited with references
@@ -517,15 +598,31 @@ Your guides must be:
 Write in markdown format. Use code blocks with language tags.
 Do not include architecture diagrams or excessive theory."""
 
+    # Build implementation sections based on what's specified
+    implementation_sections = []
+    if backend:
+        implementation_sections.append(f"- **{backend} Implementation** with complete code examples")
+    if frontend:
+        implementation_sections.append(f"- **{frontend} Implementation** with complete code examples")
+    implementation_sections.append("- Configuration files (environment variables, secrets management)")
+
+    # Build deployment section based on what's specified
+    deployment_target = deployment if deployment else "containerized environment"
+    if cloud_provider:
+        deployment_target += f" on {cloud_provider}"
+
+    infrastructure_note = ""
+    if infrastructure:
+        infrastructure_note = f"\n   - Integration with {', '.join(infrastructure)}"
+
     prompt = f"""Generate a complete implementation guide for developers.
 
 Topic: Implement secure {security_topic}
 Project Type: {project_type}
-Tech Stack:
-- Backend: {backend or 'Generic'}
-- Frontend: {frontend or 'N/A'}
-- Database: {database or 'N/A'}
-- Deployment: {deployment or 'Docker'}
+
+Tech Stack (ONLY use these technologies - do not add others):
+{tech_stack_text}
+{f"Additional Context: {additional_context}" if additional_context else ""}
 
 Organized Research Knowledge:
 {knowledge_text}
@@ -534,24 +631,32 @@ Available Sources for Citations:
 {sources_text}
 
 Generate a markdown document with these sections:
+
 1. **Overview** (2-3 sentences max)
-2. **Prerequisites** (dependencies, versions, setup)
+
+2. **Prerequisites** (ONLY list dependencies for {backend if backend else 'the specified stack'})
+
 3. **Implementation Guide**
-   - Backend implementation with complete code examples for {backend or 'your framework'}
-   {"- Frontend implementation with code for " + frontend if frontend else ""}
-   - Configuration files (environment variables, config files)
-4. **Deployment**
-   - {deployment or 'Docker'} configuration with security best practices
+{chr(10).join('   ' + s for s in implementation_sections)}
+
+4. **Deployment** (for {deployment_target})
+   - {deployment if deployment else 'Container'} configuration with security best practices{infrastructure_note}
    - Production checklist
-5. **Common Issues and Troubleshooting** (3-5 common problems)
+
+5. **Common Issues and Troubleshooting** (3-5 common problems specific to {backend if backend else 'this implementation'})
+
 6. **Security Notes** (key security considerations, OWASP references)
+
 7. **References** (numbered list with URLs)
 
-Requirements:
-- Code must be PRODUCTION-READY, not pseudocode
+CRITICAL REQUIREMENTS:
+- Code must be PRODUCTION-READY for {backend if backend else 'the specified framework'}, not pseudocode
 - Include ALL necessary imports and error handling
 - Add inline comments explaining security decisions
 - Cite sources using [1], [2] format inline, list at end
+- DO NOT include code for technologies not listed in the tech stack
+- DO NOT suggest or mention databases if none was specified
+- DO NOT suggest or mention frontend frameworks if none was specified
 - Keep it practical - no excessive theory
 - Use realistic variable names and configurations"""
 
