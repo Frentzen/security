@@ -1,0 +1,3 @@
+{
+  "raw_query": "I need to use JWE to encrypt my json payloads in my springboot microservices deployed in AKS exposed through APIM and AppGw all in a Azure environment"
+}

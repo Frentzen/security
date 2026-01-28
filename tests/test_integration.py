@@ -7,6 +7,7 @@ sys.path.insert(0, '/home/user/security')
 
 from src.agent.graph import create_agent_graph, run_agent
 from src.agent.edges import (
+    route_entry_point,
     route_after_context_analysis,
     route_after_validation,
     route_after_revision,
@@ -15,6 +16,18 @@ from src.agent.edges import (
 
 class TestEdgeRouting:
     """Tests for conditional edge routing."""
+
+    def test_route_to_query_parser_with_raw_query(self):
+        """Test routing to query parser when raw query needs parsing."""
+        state = {"needs_query_parsing": True}
+        result = route_entry_point(state)
+        assert result == "query_parser"
+
+    def test_route_to_context_analyzer_with_structured_input(self):
+        """Test routing to context analyzer with structured input."""
+        state = {"needs_query_parsing": False}
+        result = route_entry_point(state)
+        assert result == "context_analyzer"
 
     def test_route_to_discovery_for_oss(self):
         """Test routing to discovery for OSS projects."""
@@ -152,6 +165,49 @@ class TestAgentIntegration:
         assert report is not None
         # Discovery should have been triggered
         mock_tavily.search.assert_called()
+
+
+    @patch('src.agent.nodes.tavily')
+    @patch('src.agent.nodes.claude')
+    def test_query_based_flow(self, mock_claude, mock_tavily):
+        """Test that a natural language query flows through query parser."""
+        import json
+
+        # Mock Claude responses in order:
+        # 1. Query parser extracts structured context
+        # 2. Planner generates research plan
+        # 3. Synthesizer organizes findings
+        # 4. Architect generates guide (via generate, not generate_json)
+        # 5. Validator reviews guide
+        mock_claude.generate_json.side_effect = [
+            json.dumps({
+                "security_topic": "JWE Payload Encryption",
+                "project_type": "microservice",
+                "tech_stack": {"backend": "Spring Boot", "frontend": None, "database": None, "deployment": "AKS"},
+                "project_name": None,
+                "project_url": None,
+                "requirements": {"cloud_provider": "Azure", "infrastructure_components": ["APIM", "AppGw"]}
+            }),
+            '["JWE encryption Spring Boot", "JWE best practices"]',  # Planner
+            '{"prerequisites": ["nimbus-jose-jwt"], "implementation_steps": []}',  # Synthesizer
+            '{"issues": [], "overall_quality": "good"}',  # Validator
+        ]
+        mock_claude.generate.return_value = "# JWE Implementation Guide\n\nEncrypt JSON payloads using JWE in Spring Boot."
+
+        mock_tavily.search_parallel.return_value = [
+            {"query": "JWE", "url": "https://example.com", "title": "JWE Guide", "snippet": "JWE info"}
+        ]
+
+        context = {
+            "raw_query": "I need to use JWE to encrypt my json payloads in my springboot microservices deployed in AKS exposed through APIM and AppGw all in Azure"
+        }
+
+        report = run_agent(context)
+
+        assert report is not None
+        assert len(report) > 0
+        # Query parser should have been called (first generate_json call)
+        assert mock_claude.generate_json.call_count >= 1
 
 
 if __name__ == "__main__":

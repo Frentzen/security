@@ -8,6 +8,7 @@ sys.path.insert(0, '/home/user/security')
 
 from src.agent.state import AgentState
 from src.agent.nodes import (
+    query_parser,
     context_analyzer,
     repository_analyzer,
     tech_stack_discovery,
@@ -20,6 +21,7 @@ from src.agent.nodes import (
     report_generator,
 )
 from src.agent.edges import (
+    route_entry_point,
     route_after_context_analysis,
     route_after_repository_analysis,
     route_after_validation,
@@ -41,6 +43,8 @@ def create_agent_graph() -> StateGraph:
     graph = StateGraph(AgentState)
 
     # Add all nodes
+    graph.add_node("entry_router", lambda state: state)  # pass-through for routing
+    graph.add_node("query_parser", query_parser)
     graph.add_node("context_analyzer", context_analyzer)
     graph.add_node("repository_analyzer", repository_analyzer)
     graph.add_node("tech_stack_discovery", tech_stack_discovery)
@@ -52,8 +56,20 @@ def create_agent_graph() -> StateGraph:
     graph.add_node("revision", revision)
     graph.add_node("report_generator", report_generator)
 
-    # Set entry point
-    graph.set_entry_point("context_analyzer")
+    # Set entry point - routes to query parser or context analyzer
+    graph.set_entry_point("entry_router")
+
+    graph.add_conditional_edges(
+        "entry_router",
+        route_entry_point,
+        {
+            "query_parser": "query_parser",
+            "context_analyzer": "context_analyzer",
+        }
+    )
+
+    # After query parsing, always go to context analysis
+    graph.add_edge("query_parser", "context_analyzer")
 
     # Add conditional edge after context analysis
     graph.add_conditional_edges(
@@ -125,12 +141,21 @@ def run_agent(input_context: dict) -> str:
     Returns:
         Final markdown report
     """
-    logger.info(f"Running agent for topic: {input_context.get('security_topic', 'Unknown')}")
+    # Determine if we need to parse a raw query
+    has_raw_query = bool(input_context.get("raw_query"))
+    has_security_topic = bool(input_context.get("security_topic"))
+    needs_query_parsing = has_raw_query and not has_security_topic
+
+    if needs_query_parsing:
+        logger.info(f"Running agent with raw query: {input_context.get('raw_query', '')[:80]}...")
+    else:
+        logger.info(f"Running agent for topic: {input_context.get('security_topic', 'Unknown')}")
 
     # Create initial state
     initial_state: AgentState = {
         "context": input_context,
         "needs_discovery": False,
+        "needs_query_parsing": needs_query_parsing,
         "repository_analysis": None,
         "research_plan": [],
         "search_results": [],

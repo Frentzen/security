@@ -131,6 +131,12 @@ def main():
     )
 
     parser.add_argument(
+        "-q", "--query",
+        type=str,
+        help="Natural language query describing your security need (e.g., 'I need to implement JWE encryption in my Spring Boot microservices deployed on AKS')"
+    )
+
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose logging"
@@ -147,10 +153,35 @@ def main():
         # Load from file
         logger.info(f"Loading input from: {args.input}")
         context = load_input_from_file(args.input)
+    elif args.query:
+        # Natural language query mode
+        logger.info("Using natural language query mode")
+        context = {
+            "raw_query": args.query,
+            "tech_stack": {},
+        }
+
+        # Allow overriding specific fields alongside the query
+        if args.project_type:
+            context["project_type"] = args.project_type
+        if args.backend:
+            context.setdefault("tech_stack", {})["backend"] = args.backend
+        if args.frontend:
+            context.setdefault("tech_stack", {})["frontend"] = args.frontend
+        if args.database:
+            context.setdefault("tech_stack", {})["database"] = args.database
+        if args.deployment:
+            context.setdefault("tech_stack", {})["deployment"] = args.deployment
+        if args.project_url:
+            context["project_url"] = args.project_url
+        if args.project_name:
+            context["project_name"] = args.project_name
+        if args.topic:
+            context["security_topic"] = args.topic
     else:
         # Build from command line arguments
         if not args.topic:
-            parser.error("--topic is required when not using --input")
+            parser.error("--topic or --query is required when not using --input")
 
         context = {
             "project_type": args.project_type or "api_only",
@@ -171,13 +202,16 @@ def main():
         if args.project_name:
             context["project_name"] = args.project_name
 
-    # Validate required fields
-    if not context.get("security_topic"):
-        logger.error("security_topic is required")
+    # Validate: need either security_topic or raw_query
+    if not context.get("security_topic") and not context.get("raw_query"):
+        logger.error("Either --topic or --query is required")
         sys.exit(1)
 
-    logger.info(f"Starting agent for: {context.get('security_topic')}")
-    logger.info(f"Tech stack: {context.get('tech_stack', {})}")
+    if context.get("raw_query"):
+        logger.info(f"Starting agent with query: {context['raw_query'][:80]}...")
+    else:
+        logger.info(f"Starting agent for: {context.get('security_topic')}")
+        logger.info(f"Tech stack: {context.get('tech_stack', {})}")
 
     # Run the agent
     try:

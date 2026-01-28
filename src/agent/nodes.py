@@ -20,6 +20,120 @@ claude = ClaudeClient()
 tavily = TavilyClient()
 
 
+def query_parser(state: AgentState) -> dict[str, Any]:
+    """Parse a natural language query to extract structured context.
+
+    Uses Claude to understand the user's intent and extract project type,
+    tech stack, security topic, and additional requirements from free-form text.
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        Updated state with parsed context
+    """
+    logger.info("Parsing natural language query")
+
+    context = state.get("context", {})
+    raw_query = context.get("raw_query", "")
+
+    if not raw_query:
+        logger.warning("No raw query to parse")
+        return {"needs_query_parsing": False}
+
+    prompt = f"""Analyze the following user request about a security implementation need and extract structured information.
+
+User Request:
+"{raw_query}"
+
+Extract and return a JSON object with these fields:
+{{
+    "security_topic": "The main security topic (e.g., 'JWE Payload Encryption', 'JWT Authentication', 'OAuth2', 'API Rate Limiting', 'mTLS', 'CSRF Protection')",
+    "project_type": "One of: api_only, fullstack_app, opensource_project, microservice",
+    "tech_stack": {{
+        "backend": "Backend framework or language (e.g., 'Spring Boot', 'FastAPI', 'Django', 'Express.js') or null",
+        "frontend": "Frontend framework (e.g., 'React', 'Angular', 'Vue') or null",
+        "database": "Database (e.g., 'PostgreSQL', 'MongoDB', 'MySQL') or null",
+        "deployment": "Deployment platform/tools (e.g., 'AKS', 'Kubernetes', 'Docker', 'AWS ECS') or null"
+    }},
+    "project_name": "Project name if mentioned, or null",
+    "project_url": "Repository URL if mentioned, or null",
+    "requirements": {{
+        "additional_context": "Any extra details from the query that don't fit the fields above (cloud provider, API gateway, specific services, compliance needs, etc.)",
+        "cloud_provider": "Cloud provider if mentioned (e.g., 'Azure', 'AWS', 'GCP') or null",
+        "infrastructure_components": ["List of infrastructure components mentioned (e.g., 'APIM', 'Application Gateway', 'API Gateway', 'Load Balancer')"]
+    }}
+}}
+
+Rules:
+- Extract as much as possible from the query; use null for anything not mentioned
+- For project_type, infer from context: if they mention microservices use "microservice", if they mention frontend use "fullstack_app", otherwise default to "api_only"
+- For security_topic, be specific and descriptive (e.g., "JWE JSON Payload Encryption" not just "encryption")
+- For deployment, include the orchestration platform (e.g., "AKS" not just "Kubernetes") if specified
+- Capture cloud-specific services (like Azure APIM, AWS API Gateway) in requirements.infrastructure_components
+- If the user mentions a specific standard or RFC, include it in requirements.additional_context
+
+Return ONLY valid JSON."""
+
+    try:
+        response = claude.generate_json(prompt)
+        parsed = extract_json_from_response(response)
+
+        # Build the updated context, preserving any fields already set by the user
+        updated_context = {**context}
+
+        # Set security_topic (always from parsed result since it's derived from query)
+        if parsed.get("security_topic"):
+            updated_context["security_topic"] = parsed["security_topic"]
+
+        # Set project_type (user-provided takes precedence)
+        if not context.get("project_type") and parsed.get("project_type"):
+            updated_context["project_type"] = parsed["project_type"]
+
+        # Merge tech stacks: user-provided values take precedence
+        user_stack = context.get("tech_stack", {})
+        parsed_stack = parsed.get("tech_stack", {})
+        merged_stack = {}
+        for key in ("backend", "frontend", "database", "deployment"):
+            user_val = user_stack.get(key)
+            parsed_val = parsed_stack.get(key)
+            if user_val:
+                merged_stack[key] = user_val
+            elif parsed_val:
+                merged_stack[key] = parsed_val
+        updated_context["tech_stack"] = merged_stack
+
+        # Set optional fields
+        if not context.get("project_name") and parsed.get("project_name"):
+            updated_context["project_name"] = parsed["project_name"]
+        if not context.get("project_url") and parsed.get("project_url"):
+            updated_context["project_url"] = parsed["project_url"]
+
+        # Merge requirements
+        user_reqs = context.get("requirements") or {}
+        parsed_reqs = parsed.get("requirements") or {}
+        if parsed_reqs or user_reqs:
+            updated_context["requirements"] = {**parsed_reqs, **user_reqs}
+
+        logger.info(
+            f"Query parsed - Topic: {updated_context.get('security_topic')}, "
+            f"Type: {updated_context.get('project_type')}, "
+            f"Stack: {updated_context.get('tech_stack')}"
+        )
+
+        return {
+            "context": updated_context,
+            "needs_query_parsing": False,
+        }
+
+    except Exception as e:
+        logger.error(f"Query parsing failed: {e}")
+        return {
+            "errors": state.get("errors", []) + [f"Query parsing failed: {str(e)}"],
+            "needs_query_parsing": False,
+        }
+
+
 def context_analyzer(state: AgentState) -> dict[str, Any]:
     """Analyze input context and determine workflow path.
 

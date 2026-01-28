@@ -1,0 +1,7 @@
+{
+  "raw_query": "I want to secure my REST APIs with OAuth2 and OpenID Connect using Keycloak as identity provider",
+  "tech_stack": {
+    "backend": "Spring Boot"
+  },
+  "project_type": "microservice"
+}

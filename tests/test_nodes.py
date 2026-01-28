@@ -1,12 +1,13 @@
 """Unit tests for agent nodes."""
 
+import json
 import pytest
 from unittest.mock import Mock, patch
 import sys
 sys.path.insert(0, '/home/user/security')
 
 from src.agent.state import AgentState
-from src.agent.nodes import context_analyzer, planner
+from src.agent.nodes import context_analyzer, query_parser, planner
 from src.utils.helpers import extract_json_from_response, sanitize_markdown, merge_tech_stacks
 
 
@@ -57,6 +58,111 @@ class TestContextAnalyzer:
         result = context_analyzer(state)
 
         assert result["needs_discovery"] == False
+
+
+class TestQueryParser:
+    """Tests for query_parser node."""
+
+    @patch('src.agent.nodes.claude')
+    def test_parses_natural_language_query(self, mock_claude):
+        """Test parsing a natural language query into structured context."""
+        mock_claude.generate_json.return_value = json.dumps({
+            "security_topic": "JWE JSON Payload Encryption",
+            "project_type": "microservice",
+            "tech_stack": {
+                "backend": "Spring Boot",
+                "frontend": None,
+                "database": None,
+                "deployment": "AKS"
+            },
+            "project_name": None,
+            "project_url": None,
+            "requirements": {
+                "additional_context": "Azure environment with APIM and Application Gateway",
+                "cloud_provider": "Azure",
+                "infrastructure_components": ["APIM", "Application Gateway"]
+            }
+        })
+
+        state: AgentState = {
+            "context": {
+                "raw_query": "I need to use JWE to encrypt my json payloads in my springboot microservices deployed in AKS exposed through APIM and AppGw all in Azure"
+            }
+        }
+
+        result = query_parser(state)
+
+        assert result["context"]["security_topic"] == "JWE JSON Payload Encryption"
+        assert result["context"]["project_type"] == "microservice"
+        assert result["context"]["tech_stack"]["backend"] == "Spring Boot"
+        assert result["context"]["tech_stack"]["deployment"] == "AKS"
+        assert result["context"]["requirements"]["cloud_provider"] == "Azure"
+        assert result["needs_query_parsing"] == False
+
+    @patch('src.agent.nodes.claude')
+    def test_user_provided_values_take_precedence(self, mock_claude):
+        """Test that explicit user values override parsed values."""
+        mock_claude.generate_json.return_value = json.dumps({
+            "security_topic": "JWT Authentication",
+            "project_type": "api_only",
+            "tech_stack": {
+                "backend": "Django",
+                "frontend": None,
+                "database": "SQLite",
+                "deployment": "Docker"
+            },
+            "project_name": None,
+            "project_url": None,
+            "requirements": {}
+        })
+
+        state: AgentState = {
+            "context": {
+                "raw_query": "I want JWT auth in my app",
+                "tech_stack": {"backend": "FastAPI"},  # User override
+                "project_type": "microservice",  # User override
+            }
+        }
+
+        result = query_parser(state)
+
+        # User-provided values should win
+        assert result["context"]["tech_stack"]["backend"] == "FastAPI"
+        assert result["context"]["project_type"] == "microservice"
+        # Parsed values fill gaps
+        assert result["context"]["tech_stack"]["deployment"] == "Docker"
+        assert result["context"]["security_topic"] == "JWT Authentication"
+
+    @patch('src.agent.nodes.claude')
+    def test_handles_parsing_failure_gracefully(self, mock_claude):
+        """Test graceful fallback when Claude fails to parse."""
+        mock_claude.generate_json.side_effect = Exception("API Error")
+
+        state: AgentState = {
+            "context": {
+                "raw_query": "Something about security"
+            },
+            "errors": []
+        }
+
+        result = query_parser(state)
+
+        assert result["needs_query_parsing"] == False
+        assert len(result["errors"]) > 0
+
+    @patch('src.agent.nodes.claude')
+    def test_empty_query_skips_parsing(self, mock_claude):
+        """Test that empty query skips parsing."""
+        state: AgentState = {
+            "context": {
+                "raw_query": ""
+            }
+        }
+
+        result = query_parser(state)
+
+        assert result["needs_query_parsing"] == False
+        mock_claude.generate_json.assert_not_called()
 
 
 class TestHelpers:

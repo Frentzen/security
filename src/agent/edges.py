@@ -12,6 +12,25 @@ from config import MAX_ITERATIONS
 logger = logging.getLogger(__name__)
 
 
+def route_entry_point(state: AgentState) -> Literal["query_parser", "context_analyzer"]:
+    """Route at entry point: parse raw query or go to context analysis.
+
+    Args:
+        state: Current agent state
+
+    Returns:
+        Next node name
+    """
+    needs_parsing = state.get("needs_query_parsing", False)
+
+    if needs_parsing:
+        logger.info("Routing to query parser for natural language understanding")
+        return "query_parser"
+    else:
+        logger.info("Structured input provided, routing to context analyzer")
+        return "context_analyzer"
+
+
 def route_after_context_analysis(state: AgentState) -> Literal["repository_analyzer", "planner"]:
     """Route after context analysis based on discovery needs.
 

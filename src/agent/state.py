@@ -19,6 +19,7 @@ class InputContext(TypedDict, total=False):
     tech_stack: TechStack
     security_topic: str
     requirements: Optional[dict]
+    raw_query: Optional[str]
 
 
 class SearchResult(TypedDict):
@@ -84,6 +85,7 @@ class AgentState(TypedDict, total=False):
 
     # Control fields
     iteration_count: int
+    needs_query_parsing: bool
 
     # Error tracking
     errors: list[str]
