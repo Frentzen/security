@@ -15,9 +15,19 @@ from config import MAX_RESEARCH_QUESTIONS, MAX_ITERATIONS
 
 logger = logging.getLogger(__name__)
 
-# Initialize clients
-claude = ClaudeClient()
-tavily = TavilyClient()
+# Module-level clients - lazy initialized for testability
+# Tests can patch these before they're initialized
+claude = None
+tavily = None
+
+
+def _init_clients():
+    """Initialize clients if not already set (allows test mocking)."""
+    global claude, tavily
+    if claude is None:
+        claude = ClaudeClient()
+    if tavily is None:
+        tavily = TavilyClient()
 
 
 def query_parser(state: AgentState) -> dict[str, Any]:
@@ -40,6 +50,8 @@ def query_parser(state: AgentState) -> dict[str, Any]:
     if not raw_query:
         logger.warning("No raw query to parse")
         return {"needs_query_parsing": False}
+
+    _init_clients()
 
     prompt = f"""Analyze the following user request about a security implementation need and extract structured information.
 
@@ -78,6 +90,10 @@ Return ONLY valid JSON."""
     try:
         response = claude.generate_json(prompt)
         parsed = extract_json_from_response(response)
+
+        # Ensure we got a dictionary, not a list or other type
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Expected JSON object from query parsing, got {type(parsed).__name__}. Response: {str(parsed)[:200]}")
 
         # Build the updated context, preserving any fields already set by the user
         updated_context = {**context}
@@ -196,6 +212,8 @@ def repository_analyzer(state: AgentState) -> dict[str, Any]:
     else:
         logger.warning("No project URL or name provided for repository analysis")
         return {"repository_analysis": None}
+
+    _init_clients()
 
     try:
         # Search for repository information
@@ -325,6 +343,8 @@ def planner(state: AgentState) -> dict[str, Any]:
 
     tech_stack_text = "\n".join(tech_stack_lines) if tech_stack_lines else "Not specified"
 
+    _init_clients()
+
     prompt = f"""Create a research plan for implementing secure {security_topic} in a {project_type} project.
 
 Tech Stack:
@@ -404,6 +424,8 @@ def researcher(state: AgentState) -> dict[str, Any]:
         logger.warning("No research plan available")
         return {"search_results": []}
 
+    _init_clients()
+
     try:
         # Execute searches in parallel
         all_results = tavily.search_parallel(research_plan)
@@ -450,6 +472,8 @@ def synthesizer(state: AgentState) -> dict[str, Any]:
     if not search_results:
         logger.warning("No search results to synthesize")
         return {"synthesized_knowledge": None}
+
+    _init_clients()
 
     results_text = format_search_results(search_results)
 
@@ -552,6 +576,8 @@ def architect(state: AgentState) -> dict[str, Any]:
     cloud_provider = requirements.get("cloud_provider", "")
     infrastructure = requirements.get("infrastructure_components", [])
     additional_context = requirements.get("additional_context", "")
+
+    _init_clients()
 
     # Build tech stack description - ONLY include what's specified
     tech_stack_lines = []
@@ -697,6 +723,8 @@ def validator(state: AgentState) -> dict[str, Any]:
         logger.warning("No draft to validate")
         return {"validation_feedback": []}
 
+    _init_clients()
+
     prompt = f"""Review this security implementation guide for quality and completeness.
 
 Implementation Guide:
@@ -788,6 +816,8 @@ def revision(state: AgentState) -> dict[str, Any]:
     if not feedback_text:
         logger.info("No critical/important issues to address")
         return {"iteration_count": iteration_count + 1}
+
+    _init_clients()
 
     feedback_formatted = "\n".join(feedback_text)
 

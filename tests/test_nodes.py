@@ -63,8 +63,9 @@ class TestContextAnalyzer:
 class TestQueryParser:
     """Tests for query_parser node."""
 
+    @patch('src.agent.nodes.tavily')
     @patch('src.agent.nodes.claude')
-    def test_parses_natural_language_query(self, mock_claude):
+    def test_parses_natural_language_query(self, mock_claude, mock_tavily):
         """Test parsing a natural language query into structured context."""
         mock_claude.generate_json.return_value = json.dumps({
             "security_topic": "JWE JSON Payload Encryption",
@@ -99,8 +100,9 @@ class TestQueryParser:
         assert result["context"]["requirements"]["cloud_provider"] == "Azure"
         assert result["needs_query_parsing"] == False
 
+    @patch('src.agent.nodes.tavily')
     @patch('src.agent.nodes.claude')
-    def test_user_provided_values_take_precedence(self, mock_claude):
+    def test_user_provided_values_take_precedence(self, mock_claude, mock_tavily):
         """Test that explicit user values override parsed values."""
         mock_claude.generate_json.return_value = json.dumps({
             "security_topic": "JWT Authentication",
@@ -133,8 +135,9 @@ class TestQueryParser:
         assert result["context"]["tech_stack"]["deployment"] == "Docker"
         assert result["context"]["security_topic"] == "JWT Authentication"
 
+    @patch('src.agent.nodes.tavily')
     @patch('src.agent.nodes.claude')
-    def test_handles_parsing_failure_gracefully(self, mock_claude):
+    def test_handles_parsing_failure_gracefully(self, mock_claude, mock_tavily):
         """Test graceful fallback when Claude fails to parse."""
         mock_claude.generate_json.side_effect = Exception("API Error")
 
@@ -163,6 +166,27 @@ class TestQueryParser:
 
         assert result["needs_query_parsing"] == False
         mock_claude.generate_json.assert_not_called()
+
+    @patch('src.agent.nodes.tavily')
+    @patch('src.agent.nodes.claude')
+    def test_handles_list_response_gracefully(self, mock_claude, mock_tavily):
+        """Test graceful handling when Claude returns a JSON array instead of object."""
+        # Claude sometimes returns a list instead of an object
+        mock_claude.generate_json.return_value = '["item1", "item2"]'
+
+        state: AgentState = {
+            "context": {
+                "raw_query": "I need JWT authentication"
+            },
+            "errors": []
+        }
+
+        result = query_parser(state)
+
+        # Should handle gracefully and record error
+        assert result["needs_query_parsing"] == False
+        assert len(result["errors"]) > 0
+        assert "Expected JSON object" in result["errors"][0] or "list" in result["errors"][0]
 
 
 class TestHelpers:
@@ -211,8 +235,9 @@ class TestHelpers:
 class TestPlanner:
     """Tests for planner node."""
 
+    @patch('src.agent.nodes.tavily')
     @patch('src.agent.nodes.claude')
-    def test_planner_generates_research_plan(self, mock_claude):
+    def test_planner_generates_research_plan(self, mock_claude, mock_tavily):
         """Test that planner generates a research plan."""
         mock_claude.generate_json.return_value = '["query 1", "query 2", "query 3"]'
 
@@ -229,8 +254,9 @@ class TestPlanner:
         assert "research_plan" in result
         assert len(result["research_plan"]) > 0
 
+    @patch('src.agent.nodes.tavily')
     @patch('src.agent.nodes.claude')
-    def test_planner_fallback_on_error(self, mock_claude):
+    def test_planner_fallback_on_error(self, mock_claude, mock_tavily):
         """Test that planner uses fallback plan on error."""
         mock_claude.generate_json.side_effect = Exception("API Error")
 

@@ -54,10 +54,11 @@ def extract_json_from_response(response: str) -> Any:
         except json.JSONDecodeError:
             continue
 
-    # Try to find raw JSON (array or object)
+    # Try to find raw JSON (object first, then array)
+    # Object first because arrays inside objects would match first otherwise
     json_patterns = [
-        r'\[[\s\S]*\]',  # Array
         r'\{[\s\S]*\}',  # Object
+        r'\[[\s\S]*\]',  # Array
     ]
 
     for pattern in json_patterns:
