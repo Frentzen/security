@@ -143,7 +143,7 @@ class TestQueryParser:
 
         state: AgentState = {
             "context": {
-                "raw_query": "Something about security"
+                "raw_query": "I want to develop a masking PII framework"
             },
             "errors": []
         }
@@ -152,6 +152,10 @@ class TestQueryParser:
 
         assert result["needs_query_parsing"] == False
         assert len(result["errors"]) > 0
+        # Verify fallback security_topic is set from raw_query
+        assert "context" in result
+        assert result["context"].get("security_topic") is not None
+        assert "PII" in result["context"]["security_topic"] or "masking" in result["context"]["security_topic"]
 
     @patch('src.agent.nodes.claude')
     def test_empty_query_skips_parsing(self, mock_claude):
@@ -176,7 +180,7 @@ class TestQueryParser:
 
         state: AgentState = {
             "context": {
-                "raw_query": "I need JWT authentication"
+                "raw_query": "I need JWT authentication for my API"
             },
             "errors": []
         }
@@ -187,6 +191,10 @@ class TestQueryParser:
         assert result["needs_query_parsing"] == False
         assert len(result["errors"]) > 0
         assert "Expected JSON object" in result["errors"][0] or "list" in result["errors"][0]
+        # Verify fallback security_topic is set from raw_query
+        assert "context" in result
+        assert result["context"].get("security_topic") is not None
+        assert "JWT" in result["context"]["security_topic"] or "authentication" in result["context"]["security_topic"]
 
 
 class TestHelpers:

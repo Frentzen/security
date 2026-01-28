@@ -144,7 +144,31 @@ Return ONLY valid JSON."""
 
     except Exception as e:
         logger.error(f"Query parsing failed: {e}")
+
+        # CRITICAL: Set a fallback security_topic from raw_query to prevent downstream
+        # nodes from working with an empty topic and generating generic content
+        fallback_context = {**context}
+
+        # Use the raw query as the security topic - it's better than nothing
+        # and allows the pipeline to generate relevant (if less refined) content
+        if raw_query and not context.get("security_topic"):
+            # Try to extract the most relevant part of the query for the topic
+            # by removing common prefixes and keeping it concise
+            topic = raw_query.strip()
+            for prefix in ["I want to ", "I need to ", "Help me ", "How to ", "How do I "]:
+                if topic.lower().startswith(prefix.lower()):
+                    topic = topic[len(prefix):]
+                    break
+            # Capitalize first letter and limit length
+            topic = topic[0].upper() + topic[1:] if topic else raw_query
+            if len(topic) > 100:
+                topic = topic[:100].rsplit(' ', 1)[0]  # Cut at word boundary
+
+            fallback_context["security_topic"] = topic
+            logger.warning(f"Using raw query as fallback security_topic: {topic}")
+
         return {
+            "context": fallback_context,
             "errors": state.get("errors", []) + [f"Query parsing failed: {str(e)}"],
             "needs_query_parsing": False,
         }
