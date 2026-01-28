@@ -1,0 +1,9 @@
+{
+  "project_type": "api_only",
+  "tech_stack": {
+    "backend": "FastAPI",
+    "database": "PostgreSQL",
+    "deployment": "Docker"
+  },
+  "security_topic": "JWT Authentication"
+}

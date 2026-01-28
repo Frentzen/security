@@ -1,0 +1,14 @@
+{
+  "project_type": "fullstack_app",
+  "tech_stack": {
+    "backend": "FastAPI",
+    "frontend": "React 18",
+    "database": "PostgreSQL",
+    "deployment": "Docker"
+  },
+  "security_topic": "JWT Authentication",
+  "requirements": {
+    "refresh_tokens": true,
+    "session_management": true
+  }
+}

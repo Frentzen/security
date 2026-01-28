@@ -1,0 +1,7 @@
+{
+  "project_type": "opensource_project",
+  "project_name": "Apache Fineract",
+  "project_url": "https://github.com/apache/fineract",
+  "tech_stack": {},
+  "security_topic": "API Rate Limiting"
+}

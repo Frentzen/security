@@ -1,0 +1,13 @@
+{
+  "project_type": "microservice",
+  "tech_stack": {
+    "backend": "Spring Boot",
+    "database": "MongoDB",
+    "deployment": "Kubernetes"
+  },
+  "security_topic": "OAuth2 Implementation",
+  "requirements": {
+    "identity_provider": "Keycloak",
+    "scopes": ["read", "write", "admin"]
+  }
+}
